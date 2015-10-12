@@ -1,0 +1,123 @@
+```{r setup, echo=FALSE}
+# set global chunk options: images will be 7x5 inches
+#opts_chunk$set(fig.width=9, fig.height=5)
+library(ggplot2)
+
+curve.theme <- theme(plot.title=element_text(face="bold", size=16),
+                     axis.title.x=element_text(size=14),
+                     axis.title.y=element_text(size=14),
+                     axis.text.x=element_text(size=10),
+                     axis.text.y=element_text(size=10),
+                     axis.ticks = element_line(size = 2),
+                     legend.text=element_text(size=10),
+                     legend.title=element_text(size=10))
+
+```
+
+## Distribution smoothing in Zonation
+
+### The alpha-value
+
+The $\alpha$-value of biodiversity feature-specific scale of landscape use 
+(parameter of negative exponential, $\alpha_j$). This parameter is only used when 
+distribution smoothing is enabled. However, you always need to specify this 
+parameter, and any numerical value will do fine if distribution smoothing is not 
+used. The value indicates the range of connectivity of biodiversity features. 
+For example, it may refer to how a species uses the surrounding landscape.
+
+**How to define the degree of smoothing for individual features.** The 
+$\alpha$-value indicates how species use the surrounding landscape and can be
+calculated based on, for example, the dispersal capability or the home range
+sizes of the species. It can be calculated as:
+
+$\alpha=\frac{2}{Use\ of\ landscape\ (in\ same\ units\ as\ cell\ size)}$
+
+It is extremely important to make sure that the distance units used in this
+calculation are consistent with the cell size units used in the feature
+distribution files. The above equation assumes that '*use of landscape*' is 
+given in the same units that are use for the cell size value in the feature 
+distribution files (if these are .asc files, the cell size value is given in the 
+'*cellsize*' field in the first rows). For example, if the cell size in the 
+distribution files is 1 km and the known/guesstimated mean dispersal capability 
+of a species is 3 km, then the value of alpha for this feature is:
+
+$\alpha=\frac{2}{3}\approx0.667$
+
+Let the cell size of the distribution files is 100 meters. Let's calculate the
+corresponding $\alpha$-values for mean dispersal distances of 500, 1000 and 
+3000 meters:
+
+```{r }
+(alpha.500 <- 2 / 500)
+(alpha.1000 <- 2 / 1000)
+(alpha.3000 <- 2 / 3000)
+````
+
+### Distribution smoothing
+
+Distribution smoothing transforms the values of each pixel in the distribution 
+file by the values of all the other pixel values according to a negative 
+exponential kernel, where the above calulated alpha value is used as a 
+multiplier.
+
+When using smoothing, the value for species $j$ in a focal cell $i$ is
+
+$O_ij'=\sum\limits_{x}\sum\limits_{y}exp(-\alpha d(x-u,y-r))O_ij$
+
+where $O_ij$ is the original occurrence level of species $j$ at cell $i$. Cell 
+$i$ is located in $(u,r)$ and $d(x-u, y-r)$ is the distance between locations 
+$(x,y)$ and $(u,r)$. The summation is over the landscape grid and $\alpha_j$ is
+the parameter of the dispersal kernel for species $j$. This is a two-dimension 
+kernel smoothing using a radially symmetric negative exponential (dispersal) 
+kernel.
+
+For the above calculated $\alpha$-values, the kernel takes the following values:
+
+```{r echo=FALSE}
+distance <- 5000
+
+kernel.trans <- function(distance, alpha, two.dim=FALSE) {
+  if (!two.dim) {
+    alpha <- alpha / 2
+  }
+  return(data.frame(x = 1:distance,
+                    y = exp(-alpha * 1:distance),
+                    alpha = paste0("alpha.", alpha)))
+}
+
+dat <- do.call("rbind", lapply(c(alpha.500, alpha.1000, alpha.3000),
+                               kernel.trans, distance=distance))
+
+p <- ggplot(dat, aes(x=x, y=y, group=alpha, colour=alpha)) + 
+     ylab("Value\n") + xlab("\nDistance (m)") +
+     scale_colour_discrete(name="Mean dispersal distance (m)",
+                         labels=c("500m", "1000m", "3000m"))
+p + geom_line() + curve.theme
+```
+
+The value on the y-axis can be interpreted as the fraction of dispersal events 
+with length given by the corresponding value on the x-axis. Note that the mean 
+dispersal distances (500, 1000, and 3000 meters) on the x-axis correspond to 
+value
+
+$value=exp(-1)\approx 0.368$
+
+on the y-axis.
+
+```{r echo=FALSE}
+
+p <- ggplot(dat, aes(x=x, y=y, group=alpha, colour=alpha)) + 
+     ylab("Value") + xlab("Distance") +
+     scale_colour_discrete(name="Mean dispersal distance",
+                         labels=c("500m", "1000m", "3000m"))
+p + geom_line() + geom_hline(yintercept=exp(-1)) + 
+    geom_segment(aes(x = 500, y =0, xend = 500, yend = exp(-1)), colour="grey",
+                 linetype="dashed") +
+    geom_segment(aes(x = 1000, y =0, xend = 1000, yend = exp(-1)), colour="grey",
+                 linetype="dashed") + 
+    geom_segment(aes(x = 3000, y =0, xend = 3000, yend = exp(-1)), colour="grey",
+                 linetype="dashed") +
+    geom_text(aes(4500, 0.4, label="exp(-1)"), show_guide=FALSE, colour="grey") +
+    curve.theme
+     
+```

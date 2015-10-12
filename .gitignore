@@ -1,0 +1,6 @@
+.Rproj.user
+.Rhistory
+.RData
+rsconnect/
+*.html
+ds_explanation_files/
